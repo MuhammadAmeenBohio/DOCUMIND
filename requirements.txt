@@ -2,3 +2,8 @@ beautifulsoup4==4.13.3
 fitz==0.0.1.dev2
 python_docx==1.1.2
 Requests==2.32.3
+pymupdf
+langchain-community
+sentence-transformers
+faiss-cpu
+ollama
