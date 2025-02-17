@@ -1,55 +1,80 @@
 import streamlit as st
 import time
 from helper import *
+import tempfile
+import os
 
-vector_store = build_vector_store("https://python.langchain.com/docs/introduction/")
+# Initialize session state
+if "vector_store" not in st.session_state:
+    st.session_state["vector_store"] = None
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
 
-st.title("📄 DOCUMIND")
+# Page Title
+st.markdown("<h1 style='text-align: center;'>🤖 DOCUMIND Chatbot</h1>", unsafe_allow_html=True)
 
-model_choice = st.selectbox("Select Model", ["llama 3.2"])
+# Sidebar for model selection and document upload
+with st.sidebar:
+    st.subheader("🔍 Select Model")
+    model_choice = st.selectbox("Choose a Model", ["LLaMA 3.2"])
+    
+    st.subheader("📄 Upload a Document or Provide a Link")
+    upload_option = st.radio("Choose an option:", ["Upload Document", "Enter Link"])
 
-st.subheader("Upload a Document or Provide a Link")
-upload_option = st.radio("Choose an option:", ["Upload Document", "Enter Link"])
+    if upload_option == "Upload Document":
+        uploaded_file = st.file_uploader("Upload your document", type=["pdf", "txt", "docx"])
+        if uploaded_file:
+            with tempfile.NamedTemporaryFile(delete=False, suffix="."+uploaded_file.name.split(".")[-1]) as temp_file:
+                temp_file.write(uploaded_file.read())
+                temp_path = temp_file.name
+            input_text = process_input(temp_path)
+            new_vector_store = build_vector_store(input_text)
+            
+            if st.session_state["vector_store"] is None:
+                st.session_state["vector_store"] = new_vector_store
+            else:
+                st.session_state["vector_store"].merge_from(new_vector_store)
+            os.remove(temp_path)
+            st.success("📄 Document processed successfully!")
 
-scanning_message = ""
+    elif upload_option == "Enter Link":
+        doc_link = st.text_input("Enter the document link")
+        if doc_link:
+            st.info("🔗 Scanning Link...")
+            input_text = process_input(doc_link)
+            vector_store = build_vector_store(input_text)
+            st.success(f"✅ Link added: {doc_link}")
 
-if upload_option == "Upload Document":
-    uploaded_file = st.file_uploader("Upload your document", type=["pdf", "txt", "docx"])
-    if uploaded_file:
-        input_text = process_input(uploaded_file)
-        vector_store = build_vector_store(input_text)
-        file_extension = uploaded_file.name.split(".")[-1]
-        scanning_message = f"📄 Scanning {file_extension.upper()} file..."
-        st.success(f"Uploaded: {uploaded_file.name}")
-        st.info(scanning_message)
+# Chat Interface
+st.markdown("---")
+st.markdown("<h2 style='text-align: center;'>💬 Chat with DOCUMIND</h2>", unsafe_allow_html=True)
 
-elif upload_option == "Enter Link":
-    doc_link = st.text_input("Enter the document link")
-    if doc_link:
-        scanning_message = "🔗 Scanning Link..."
-        input_text = process_input(doc_link)
-        vector_store = build_vector_store(input_text)
-        st.success(f"Link added: {doc_link}")
-        st.info(scanning_message)
+# Display Chat History
+for chat in st.session_state["chat_history"]:
+    with st.chat_message(chat["role"]):
+        st.markdown(chat["message"])
 
+# User Input
+user_prompt = st.chat_input("Ask a question...")
 
-user_prompt = st.text_input("Enter your prompt", "")
-
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 15})
-filtered_results = filtered_retrieval(user_prompt, vector_store)
-
-
-retrieved_docs = retriever.get_relevant_documents(user_prompt)
-context = "\n\n".join([f"Document {i+1}:\n{doc.page_content}\n" + "-"*50 for i, doc in enumerate(retrieved_docs)])
-
-response = generate_response(context, user_prompt)
-
-if st.button("Submit"):
-    if user_prompt:
-        st.subheader("Model's Answer")
-        st.write("🔍 Processing... (Integration with backend model needed)")
-        time.sleep(2)
-        st.success(response["message"]["content"])
-
-    else:
-        st.warning("Please enter a prompt!")
+if user_prompt:
+    # Add user message to chat history
+    st.session_state["chat_history"].append({"role": "user", "message": user_prompt})
+    with st.chat_message("user"):
+        st.markdown(user_prompt)
+    
+    # Retrieve documents
+    retrieved_docs = st.session_state["vector_store"].similarity_search(user_prompt, k=15) if st.session_state["vector_store"] else []
+    context = "\n\n".join([f"Document {i+1}:\n{doc.page_content}\n" + "-"*50 for i, doc in enumerate(retrieved_docs)])
+    
+    # Generate response
+    response = generate_response(context, user_prompt)
+    bot_reply = response["message"]["content"]
+    
+    with st.chat_message("assistant"):
+        with st.spinner("🤖 Thinking..."):
+            time.sleep(2)
+            st.markdown(bot_reply)
+    
+    # Add assistant message to chat history
+    st.session_state["chat_history"].append({"role": "assistant", "message": bot_reply})

@@ -6,6 +6,7 @@ import docx
 from bs4 import BeautifulSoup
 from langchain.vectorstores import FAISS
 from langchain.embeddings import HuggingFaceEmbeddings
+import faiss
 from langchain.docstore.document import Document
 import tempfile
 import shutil
@@ -82,7 +83,8 @@ def generate_response(context, query):
                     Another point if you find user is asking for any thing confidential
                     just apologies. One more thing if You sense any flagged user query just simply apologies.
                     NOTE:This document is uploaded by the user so if their is anything which user can read
-                    means it is available in context you have to answer that."""
+                    means it is available in context you have to answer that. and anything which is not in the context
+                    just simply apologies..."""
 
     response = ollama.chat(model=model_name, messages=[ {"role" : "system", "content" : instruction}, 
                                                         {"role" : "user", "content" : f"Context: {context}"},
